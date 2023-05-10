@@ -8,8 +8,9 @@ import cocotb
 from cocotb.handle import Force
 from cocotb.triggers import ReadOnly, ReadWrite, Timer, NextTimeStep
 
-TEST_S44_BITSTREAM_ITERS = 50
-TEST_S44_LUT_MAIN_ITERS = 50
+TEST_S444_BITSTREAM_ITERS = 50
+TEST_S444_LUT4_ITERS = 50
+TEST_S444_LUT5_ITERS = 100
 
 
 async def tick(dut):
@@ -59,7 +60,7 @@ async def test_s444_bitstream(dut):
     """
     Test that writing random bitstreams succeeds
     """
-    for _ in range(TEST_S44_BITSTREAM_ITERS):
+    for _ in range(TEST_S444_BITSTREAM_ITERS):
         await write_bitstream(
             dut,
             [
@@ -146,12 +147,11 @@ async def test_s444_lut4_main(dut):
             ),
     )
 
-    for _ in range(TEST_S44_LUT_MAIN_ITERS):
+    for _ in range(TEST_S444_LUT4_ITERS):
         lut = [randint(0, 1) for _ in range(16)]
         bs.s444_logic.lut2 = lut
         await write_bitstream(dut, bs.to_bs())
         await tick(dut)
-        dut._log.debug(f"{dut.s444_logic.l2_dat.value=}")
 
         for i, o in enumerate(lut):
             dut.main.value = Force(i)
@@ -165,7 +165,33 @@ async def test_s444_lut4_feed0(dut):
     """
     Create a random feed0 LUT4 and test that it was programmed correctly
     """
-    pass
+    bs = S444Bitstream(
+            S444LogicBitstream(
+                main3=True,
+                main2=True,
+                feed0_3=False,
+                lut0=[0] * 16,
+                lut1=[0] * 16,
+                lut2=[0] * 16,
+            ),
+            LUT5MuxBitstream(feed1_3=False, ),
+            DFlipFlopsBitstream(
+                dff0=1,
+                dff1=2,
+            ),
+    )
+
+    for _ in range(TEST_S444_LUT4_ITERS):
+        lut = [randint(0, 1) for _ in range(16)]
+        bs.s444_logic.lut0 = lut
+        await write_bitstream(dut, bs.to_bs())
+        await tick(dut)
+
+        for i, o in enumerate(lut):
+            dut.feed0.value = Force(i)
+            await ReadOnly()
+            assert dut.feed0_out.value == o
+            await Timer(1, units="ns")
 
 
 @cocotb.test()
@@ -173,4 +199,198 @@ async def test_s444_lut4_feed1(dut):
     """
     Create a random feed1 LUT4 and test that it was programmed correctly
     """
-    pass
+    bs = S444Bitstream(
+            S444LogicBitstream(
+                main3=True,
+                main2=True,
+                feed0_3=False,
+                lut0=[0] * 16,
+                lut1=[0] * 16,
+                lut2=[0] * 16,
+            ),
+            LUT5MuxBitstream(feed1_3=False, ),
+            DFlipFlopsBitstream(
+                dff0=1,
+                dff1=2,
+            ),
+    )
+
+    for _ in range(TEST_S444_LUT4_ITERS):
+        lut = [randint(0, 1) for _ in range(16)]
+        bs.s444_logic.lut1 = lut
+        await write_bitstream(dut, bs.to_bs())
+        await tick(dut)
+
+        for i, o in enumerate(lut):
+            dut.feed1.value = Force(i)
+            await ReadOnly()
+            assert dut.feed1_out.value == o
+            await Timer(1, units="ns")
+
+
+@cocotb.test()
+async def test_s444_lut5(dut):
+    """
+    Creates a LUT5 by combining feed0 and feed1 in the LUT5 mux
+    """
+    bs = S444Bitstream(
+            S444LogicBitstream(
+                main3=True,
+                main2=True,
+                feed0_3=True,
+                lut0=[0] * 16,
+                lut1=[0] * 16,
+                lut2=[0] * 16,
+            ),
+            LUT5MuxBitstream(feed1_3=True, ),
+            DFlipFlopsBitstream(
+                dff0=1,
+                dff1=2,
+            ),
+    )
+
+    for _ in range(TEST_S444_LUT5_ITERS):
+        lut = [randint(0, 1) for _ in range(32)]
+        bs.s444_logic.lut0 = lut[0:16]
+        bs.s444_logic.lut1 = lut[16:32]
+        await write_bitstream(dut, bs.to_bs())
+        await tick(dut)
+
+        for i, o in enumerate(lut):
+            low4 = i % 16
+            upp1 = i // 16
+            dut.feed0.value = Force(low4)
+            # feed1_3 is set to feed0_3 thanks to the configuration, and this
+            # bit is instead used to switch between the two LUT4s, creating a
+            # LUT5
+            dut.feed1.value = Force((low4 % 8) | (upp1 << 3))
+            await ReadOnly()
+            assert dut.feed0_out.value == o
+            await Timer(1, units="ns")
+
+
+@cocotb.test()
+async def test_s444_2bit_adder(dut):
+    """
+    Creates a 2-bit counter inside the d-flip-flops.
+    Hooks up {feed0, feed1, main} as the input bits. Bits [0:1] carry the
+    previous value, bit 2 is the carry input, and main_out is the carry output
+    """
+
+    bs = S444Bitstream(
+            S444LogicBitstream(
+                main3=True,
+                main2=True,
+                feed0_3=True,
+                lut0=(I_0 ^ I_2).gen(),
+                lut1=(I_1 ^ (I_0 & I_2)).gen(),
+                lut2=(I_1 & I_2).gen()
+            ),
+            LUT5MuxBitstream(feed1_3=False, ),
+            DFlipFlopsBitstream(
+                dff0=0,  # feed0_out
+                dff1=0,  # feed1_out
+            ),
+    )
+
+    await write_bitstream(dut, bs.to_bs())
+    await tick(dut)
+    dut.en.value = Force(1)
+    dut.reset.value = 1
+    await tick(dut)
+    dut.reset.value = Force(0)
+    dut.feed0.value = 8
+    dut.feed1.value = 8
+    dut.main.value = 8
+
+    # Do the increment a given number of times
+    for i in range(10):
+        low2 = i % 4
+        bit3 = (1 << 3)
+        await ReadOnly()
+        assert dut.dff0_out.value == low2 % 2
+        assert dut.dff1_out.value == low2 // 2
+        assert dut.main_out.value == (low2 == 3)
+        await tick(dut)
+        dut.feed0.value = low2 | bit3
+        dut.feed1.value = low2 | bit3
+        dut.main.value = low2 | bit3
+
+    # Stop doing the increment, and ensure the state holds
+    for _ in range(3):
+        low2 = i % 4
+        dut.feed0.value = low2
+        dut.feed1.value = low2
+        dut.main.value = low2
+        await tick(dut)
+        assert dut.dff0_out.value == low2 % 2
+        assert dut.dff1_out.value == low2 // 2
+        assert dut.main_out.value == (low2 == 3)
+
+
+### s444.py
+
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from functools import partial
+from typing import Callable
+
+
+class LutBits:
+    def gen(self) -> list[bool]:
+        raise NotImplemented
+
+    def __invert__(self) -> 'LutBits':
+        return Not(self)
+
+    def __and__(self, other) -> 'LutBits':
+        return And(self, other)
+
+    def __or__(self, other) -> 'LutBits':
+        return Or(self, other)
+
+    def __xor__(self, other) -> 'LutBits':
+        return Xor(self, other)
+
+
+@dataclass
+class Constant(LutBits):
+    index: int
+    lut_width: int
+
+    def gen(self) -> list[bool]:
+        mask = 1 << self.index
+        return [(mask & i) != 0 for i in range(1 << self.lut_width)]
+
+
+I_0 = Constant(0, 4)
+I_1 = Constant(1, 4)
+I_2 = Constant(2, 4)
+I_3 = Constant(3, 4)
+
+
+@dataclass
+class Not(LutBits):
+    b: LutBits
+
+    def gen(self) -> list[bool]:
+        return [not i for i in self.b.gen()]
+
+
+@dataclass
+class BinOp(LutBits):
+    op: Callable[[bool, bool], bool]
+    left: LutBits
+    right: LutBits
+
+    def gen(self) -> list[bool]:
+        return [
+            self.op(lb, rb)
+            for lb, rb in zip(self.left.gen(), self.right.gen())
+        ]
+
+
+And = partial(BinOp, lambda a, b: a & b)
+Or = partial(BinOp, lambda a, b: a | b)
+Xor = partial(BinOp, lambda a, b: a ^ b)
