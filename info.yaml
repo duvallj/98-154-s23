@@ -1,0 +1,54 @@
+--- 
+project:
+  source_files:
+    - toplevel_chip.v
+    - chip.sv
+    - s444.sv
+    - library.sv
+  top_module:  "toplevel_chip"
+
+# As everyone will have access to all designs, try to make it easy for someone new to your design to know what
+# it does and how to operate it.
+#
+# Here is an example: https://github.com/mattvenn/tinytapeout_m_segments/blob/main/info.yaml
+#
+# This info will be automatically collected and used to make a datasheet for the chip.
+documentation: 
+  author:       "Jack Duvall"
+  discord:      ""
+  title:        "S444 Logic Cell"
+  description:  "Implementation of an S444 Logic Cell, capable of simulating a LUT5 and storing 2 bits of data."
+  how_it_works: "The project works by implementing an S444 Logic Cell."
+  how_to_test:  "See included CocoTB testbench"
+  external_hw:  "None required, although some wires and buttons would be good probably"
+  language:     "verilog"
+  doc_link:     "https://assets.chaos.social/media_attachments/files/110/026/931/020/246/360/original/2f1ade7ba8151455.png"
+  clock_hz:     1000
+  picture:      ""
+  inputs:
+    - "feed0_0: 0th bit of the first LUT4"
+    - feed0_1
+    - feed0_2
+    - feed0_3
+    - feed1_3
+    - "main_0: 0th bit of the combining LUT4"
+    - main_1
+    - main_2
+    - main_3
+    - "c_in: the input carry bit to the internal adder"
+    - "shift_in: bit to shift in for the bitstream"
+    - "bs_en: enables writing the bitstream"
+  outputs:
+    - "feed0_out: output of the first LUT4"
+    - "feed1_out: output of the second LUT4"
+    - "main_out: output of the combining LUT4"
+    - "dff0_out: output of the first d-flip-flop"
+    - "dff1_out: output of the first d-flip-flop"
+    - 5_unused
+    - 6_unused
+    - 7_unused
+    - "sum_out: the result of the internal adder"
+    - "c_out: the output carry bit of the internal adder"
+    - "shift_out: last bit of the bitstream after it goes through all components"
+    - 11_unused
+

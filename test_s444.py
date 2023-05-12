@@ -310,6 +310,11 @@ async def test_s444_2bit_adder(dut):
         dut.feed1.value = low2 | bit2
         dut.main.value = low2 | bit2
         await ReadOnly()
+        info(dut.feed0_out)
+        info(dut.feed1_out)
+        info(dut.dff0_out)
+        info(dut.dff1_out)
+        info(dut.main_out)
         assert dut.dff0_out.value == low2 % 2
         assert dut.dff1_out.value == low2 // 2
         assert dut.main_out.value == (low2 == 3)
