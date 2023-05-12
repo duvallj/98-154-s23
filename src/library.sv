@@ -5,7 +5,7 @@ module Lut
 (
   output logic                      O,
   input  logic [WIDTH-1:0]          I,
-  input  logic [$pow(WIDTH, 2)-1:0] D);
+  input  logic [WIDTH*WIDTH-1:0] D);
 
   assign O = D[I];
 
