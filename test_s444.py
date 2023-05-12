@@ -284,7 +284,7 @@ async def test_s444_2bit_adder(dut):
                 feed0_3=True,
                 lut0=(I_0 ^ I_2).gen(),
                 lut1=(I_1 ^ (I_0 & I_2)).gen(),
-                lut2=(I_1 & I_2).gen()
+                lut2=(I_0 & I_1 & I_2).gen()
             ),
             LUT5MuxBitstream(feed1_3=False, ),
             DFlipFlopsBitstream(
@@ -294,27 +294,27 @@ async def test_s444_2bit_adder(dut):
     )
 
     await write_bitstream(dut, bs.to_bs())
+    bit2 = (1 << 2)
+    dut.feed0.value = bit2
+    dut.feed1.value = bit2
+    dut.main.value = bit2
     await tick(dut)
-    dut.en.value = Force(1)
-    dut.reset.value = 1
-    await tick(dut)
-    dut.reset.value = Force(0)
-    dut.feed0.value = 8
-    dut.feed1.value = 8
-    dut.main.value = 8
+
+    def info(w):
+        w._log.info(f"{w.value}")
 
     # Do the increment a given number of times
-    for i in range(10):
+    for i in range(1, 10):
         low2 = i % 4
-        bit3 = (1 << 3)
+        dut.feed0.value = low2 | bit2
+        dut.feed1.value = low2 | bit2
+        dut.main.value = low2 | bit2
         await ReadOnly()
         assert dut.dff0_out.value == low2 % 2
         assert dut.dff1_out.value == low2 // 2
         assert dut.main_out.value == (low2 == 3)
+        await Timer(1, units="ns")
         await tick(dut)
-        dut.feed0.value = low2 | bit3
-        dut.feed1.value = low2 | bit3
-        dut.main.value = low2 | bit3
 
     # Stop doing the increment, and ensure the state holds
     for _ in range(3):
@@ -328,17 +328,21 @@ async def test_s444_2bit_adder(dut):
         assert dut.main_out.value == (low2 == 3)
 
 
-### s444.py
+# ## s444.py
+"""
+This needs to be included in the same file since cocotb doesn't like having
+multiple python files lol
+"""
 
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import partial
-from typing import Callable
+from typing import Callable, List
 
 
 class LutBits:
-    def gen(self) -> list[bool]:
+    def gen(self) -> List[bool]:
         raise NotImplemented
 
     def __invert__(self) -> 'LutBits':
@@ -359,7 +363,7 @@ class Constant(LutBits):
     index: int
     lut_width: int
 
-    def gen(self) -> list[bool]:
+    def gen(self) -> List[bool]:
         mask = 1 << self.index
         return [(mask & i) != 0 for i in range(1 << self.lut_width)]
 
@@ -374,7 +378,7 @@ I_3 = Constant(3, 4)
 class Not(LutBits):
     b: LutBits
 
-    def gen(self) -> list[bool]:
+    def gen(self) -> List[bool]:
         return [not i for i in self.b.gen()]
 
 
@@ -384,7 +388,7 @@ class BinOp(LutBits):
     left: LutBits
     right: LutBits
 
-    def gen(self) -> list[bool]:
+    def gen(self) -> List[bool]:
         return [
             self.op(lb, rb)
             for lb, rb in zip(self.left.gen(), self.right.gen())
